@@ -1,6 +1,3 @@
-local _, ts_utils = pcall(require, "nvim-treesitter.ts_utils")
-local configs = require("nvim-treesitter.configs")
-local parsers = require("nvim-treesitter.parsers")
 local log = require("nvim-ts-autotag._log")
 local utils = require("nvim-ts-autotag.utils")
 
@@ -149,6 +146,8 @@ M.enable_rename = true
 M.enable_close = true
 M.enable_close_on_slash = false
 
+local did_setup = false
+
 M.setup = function(opts)
     opts = opts or {}
     M.tbl_filetypes = opts.filetypes or M.tbl_filetypes
@@ -162,6 +161,7 @@ M.setup = function(opts)
     if opts.enable_close_on_slash ~= nil then
         M.enable_close_on_slash = opts.enable_close_on_slash
     end
+    did_setup = true
 end
 
 local function is_in_table(tbl, val)
@@ -194,7 +194,7 @@ local setup_ts_tag = function()
 end
 
 local function is_in_template_tag()
-    local cursor_node = ts_utils.get_node_at_cursor()
+    local cursor_node = utils.get_node_at_cursor()
     if not cursor_node then
         return false
     end
@@ -282,7 +282,7 @@ local function get_tag_name(node)
 end
 
 local function find_tag_node(opt)
-    local target = opt.target or ts_utils.get_node_at_cursor()
+    local target = opt.target or utils.get_node_at_cursor()
     local tag_pattern = opt.tag_pattern
     local name_tag_pattern = opt.name_tag_pattern
     local skip_tag_pattern = opt.skip_tag_pattern
@@ -358,7 +358,7 @@ local function check_close_tag(close_slash_tag)
 
     if close_slash_tag then
         -- Find start node from non closed tag
-        local current = ts_utils.get_node_at_cursor()
+        local current = utils.get_node_at_cursor()
         -- log.debug(current)
         target = find_start_tag(current)
         -- log.debug(target)
@@ -401,7 +401,7 @@ local function check_close_tag(close_slash_tag)
 end
 
 M.close_tag = function()
-    local buf_parser = parsers.get_parser()
+    local buf_parser = vim.treesitter.get_parser()
     if not buf_parser then
         return
     end
@@ -414,7 +414,7 @@ M.close_tag = function()
 end
 
 M.close_slash_tag = function()
-    local buf_parser = parsers.get_parser()
+    local buf_parser = vim.treesitter.get_parser()
     if not buf_parser then
         return
     end
@@ -587,8 +587,12 @@ local is_before_word = is_before("%w", 1)
 local is_before_arrow = is_before("<", 0)
 
 M.rename_tag = function()
-    if is_before_word() and parsers.has_parser() then
-        parsers.get_parser():parse(true)
+    if is_before_word() then
+        local parser = vim.treesitter.get_parser()
+        if not parser then
+            return
+        end
+        parser:parse(true)
         rename_start_tag()
         rename_end_tag()
     end
@@ -596,8 +600,11 @@ end
 
 M.attach = function(bufnr, lang)
     M.lang = lang
-    local config = configs.get_module("autotag")
-    M.setup(config)
+
+    if not did_setup then
+        local config = require("nvim-treesitter.configs").get_module("autotag")
+        M.setup(config)
+    end
 
     if is_in_table(M.tbl_filetypes, vim.bo.filetype) then
         setup_ts_tag()
@@ -642,7 +649,7 @@ M.attach = function(bufnr, lang)
 end
 
 M.detach = function(bufnr)
-    local bufnr = tonumber(bufnr) or vim.api.nvim_get_current_buf()
+    bufnr = tonumber(bufnr) or vim.api.nvim_get_current_buf()
     buffer_tag[bufnr] = nil
 end
 
